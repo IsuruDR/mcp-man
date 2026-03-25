@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCP Man — Server Manager</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #0a0a0b;
+  color: #e4e4e7;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  color: #71717a;
+  font-size: 1rem;
+}
+
+.app-shell {
+  max-width: 720px;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 16px;
+  padding-bottom: 64px;
+}
+
+/* Header */
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 0;
+  border-bottom: 1px solid #27272a;
+  margin-bottom: 20px;
+}
+.app-header h1 { font-size: 1.25rem; font-weight: 600; }
+.header-actions { display: flex; gap: 8px; }
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid #3f3f46;
+  background: #18181b;
+  color: #e4e4e7;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn:hover { background: #27272a; border-color: #52525b; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary {
+  background: #7c3aed;
+  border-color: #7c3aed;
+  color: #fff;
+}
+.btn-primary:hover { background: #6d28d9; }
+.btn-primary:disabled { background: #7c3aed; }
+.btn-sm { padding: 4px 10px; font-size: 0.75rem; }
+.btn-danger {
+  background: #450a0a;
+  border-color: #7f1d1d;
+  color: #fca5a5;
+}
+.btn-danger:hover { background: #7f1d1d; }
+
+/* Scope sections */
+.scope-section { margin-bottom: 24px; }
+.scope-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.scope-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #a1a1aa;
+}
+.scope-path {
+  font-size: 0.6875rem;
+  color: #52525b;
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Server cards */
+.server-card {
+  background: #18181b;
+  border: 1px solid #27272a;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.server-card:hover { border-color: #3f3f46; background: #1c1c1f; }
+.server-card.disabled { opacity: 0.45; }
+.server-info { flex: 1; min-width: 0; }
+.server-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.server-detail {
+  font-size: 0.75rem;
+  color: #71717a;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Type badges */
+.server-type {
+  font-size: 0.625rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.type-stdio { background: #14532d; color: #4ade80; }
+.type-http { background: #1e3a5f; color: #60a5fa; }
+.type-sse { background: #422006; color: #fbbf24; }
+.type-remote { background: #3b0764; color: #c084fc; }
+
+/* Toggle switch */
+.toggle {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  background: #3f3f46;
+  border-radius: 12px;
+  transition: background 0.2s;
+  cursor: pointer;
+}
+.toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+.toggle input:checked + .toggle-track {
+  background: #7c3aed;
+}
+.toggle input:checked + .toggle-track::after {
+  transform: translateX(20px);
+}
+
+/* Status bar */
+.status-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #18181b;
+  border-top: 1px solid #27272a;
+  padding: 10px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 100;
+}
+.status-info {
+  font-size: 0.75rem;
+  color: #71717a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.status-actions { display: flex; gap: 8px; }
+
+/* Unsaved dot */
+.unsaved-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f59e0b;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  z-index: 200;
+  animation: slideIn 0.25s ease-out;
+}
+.toast-success { background: #14532d; color: #4ade80; border: 1px solid #166534; }
+.toast-error { background: #450a0a; color: #fca5a5; border: 1px solid #7f1d1d; }
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* Detail view */
+.back-nav { margin-bottom: 16px; }
+.back-link {
+  font-size: 0.8125rem;
+  color: #7c3aed;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.back-link:hover { text-decoration: underline; }
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.detail-title { font-size: 1.25rem; font-weight: 600; }
+.scope-badge {
+  font-size: 0.625rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #27272a;
+  color: #a1a1aa;
+  text-transform: uppercase;
+}
+
+.config-section {
+  margin-bottom: 24px;
+}
+.config-section h3 {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #a1a1aa;
+  margin-bottom: 12px;
+}
+
+.field { margin-bottom: 12px; }
+.field-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #a1a1aa;
+  margin-bottom: 4px;
+}
+.field-input {
+  width: 100%;
+  padding: 8px 12px;
+  background: #09090b;
+  border: 1px solid #27272a;
+  border-radius: 6px;
+  color: #e4e4e7;
+  font-size: 0.8125rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.field-input:focus { border-color: #7c3aed; }
+.field-hint {
+  font-size: 0.6875rem;
+  color: #52525b;
+  margin-top: 2px;
+}
+
+/* Row group for env vars, args, headers */
+.row-group { display: flex; flex-direction: column; gap: 6px; }
+.row-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.row-key {
+  width: 35%;
+  flex-shrink: 0;
+}
+.row-remove {
+  background: none;
+  border: none;
+  color: #71717a;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 4px;
+  line-height: 1;
+}
+.row-remove:hover { color: #ef4444; }
+
+/* Secret fields */
+.secret-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+}
+.secret-wrap .field-input { flex: 1; }
+.reveal-btn {
+  background: none;
+  border: none;
+  color: #71717a;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 4px 6px;
+  white-space: nowrap;
+}
+.reveal-btn:hover { color: #a1a1aa; }
+
+/* JSON preview */
+.json-preview {
+  background: #09090b;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  padding: 14px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.75rem;
+  color: #a1a1aa;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* Danger zone */
+.danger-zone {
+  border: 1px solid #7f1d1d;
+  border-radius: 10px;
+  padding: 16px;
+  margin-top: 32px;
+}
+.danger-zone h3 {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #fca5a5;
+  margin-bottom: 8px;
+}
+.danger-zone p {
+  font-size: 0.75rem;
+  color: #71717a;
+  margin-bottom: 12px;
+}
+
+/* Claude.ai toggle row */
+.claude-ai-row {
+  background: #18181b;
+  border: 1px solid #27272a;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.claude-ai-info { flex: 1; }
+.claude-ai-label { font-size: 0.875rem; font-weight: 600; }
+.claude-ai-hint { font-size: 0.75rem; color: #71717a; margin-top: 2px; }
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 48px 20px;
+  color: #52525b;
+}
+.empty-state p { font-size: 0.875rem; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<div id="app"><div class="loading">Loading...</div></div>
+
+<script type="module">
+import { h, render } from 'https://esm.sh/preact@10.25.4';
+import { useState, useEffect, useCallback, useMemo } from 'https://esm.sh/preact@10.25.4/hooks';
+import htm from 'https://esm.sh/htm@3.1.1';
+
+const html = htm.bind(h);
+const TOKEN = new URLSearchParams(window.location.search).get('token');
+
+async function api(method, path, body) {
+  const opts = {
+    method,
+    headers: {
+      'Authorization': `Bearer ${TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+  };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const res = await fetch(path, opts);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || 'Request failed');
+  }
+  return res.json();
+}
+
+// ─── Toggle ────────────────────────────────────────────────────
+function Toggle({ checked, onChange }) {
+  return html`
+    <label class="toggle" onClick=${(e) => e.stopPropagation()}>
+      <input type="checkbox" checked=${checked} onChange=${onChange} />
+      <span class="toggle-track" />
+    </label>
+  `;
+}
+
+// ─── ServerCard ────────────────────────────────────────────────
+function ServerCard({ name, entry, onToggle, onClick }) {
+  const cfg = entry.config || {};
+  const type = getServerType(cfg);
+  const detail = getConnectionDetail(cfg);
+
+  return html`
+    <div class="server-card ${entry.enabled ? '' : 'disabled'}" onClick=${onClick}>
+      <div class="server-info">
+        <div class="server-name">
+          ${name}
+          <span class="server-type type-${type}">${type}</span>
+        </div>
+        ${detail && html`<div class="server-detail">${detail}</div>`}
+      </div>
+      <${Toggle} checked=${entry.enabled} onChange=${onToggle} />
+    </div>
+  `;
+}
+
+function getServerType(cfg) {
+  if (cfg.url && cfg.url.startsWith('https://')) return 'http';
+  if (cfg.url) return 'sse';
+  if (cfg.type === 'remote') return 'remote';
+  return 'stdio';
+}
+
+function getConnectionDetail(cfg) {
+  if (cfg.url) return cfg.url;
+  if (cfg.command) {
+    const args = cfg.args ? ' ' + cfg.args.join(' ') : '';
+    return cfg.command + args;
+  }
+  return '';
+}
+
+// ─── ScopeSection ──────────────────────────────────────────────
+function ScopeSection({ label, path: scopePath, servers, onToggle, onSelect }) {
+  const entries = Object.entries(servers || {});
+  if (entries.length === 0) return null;
+
+  return html`
+    <div class="scope-section">
+      <div class="scope-header">
+        <span class="scope-label">${label}</span>
+        ${scopePath && html`<span class="scope-path">${scopePath}</span>`}
+      </div>
+      ${entries.map(([name, entry]) => html`
+        <${ServerCard}
+          key=${name}
+          name=${name}
+          entry=${entry}
+          onToggle=${() => onToggle(name)}
+          onClick=${() => onSelect(name)}
+        />
+      `)}
+    </div>
+  `;
+}
+
+// ─── DetailView ────────────────────────────────────────────────
+function DetailView({ name, entry, scope, scopePath, onChange, onBack, onRemove }) {
+  const [revealedKeys, setRevealedKeys] = useState({});
+  const cfg = entry.config || {};
+  const type = getServerType(cfg);
+
+  function updateConfig(updates) {
+    onChange({ ...entry, config: { ...cfg, ...updates } });
+  }
+
+  function toggleReveal(key) {
+    setRevealedKeys(prev => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  // Env var helpers
+  const envEntries = Object.entries(cfg.env || {});
+
+  function setEnvKey(oldKey, newKey) {
+    const env = { ...cfg.env };
+    const val = env[oldKey];
+    delete env[oldKey];
+    env[newKey] = val;
+    updateConfig({ env });
+  }
+
+  function setEnvVal(key, val) {
+    updateConfig({ env: { ...cfg.env, [key]: val } });
+  }
+
+  function removeEnv(key) {
+    const env = { ...cfg.env };
+    delete env[key];
+    updateConfig({ env });
+  }
+
+  function addEnv() {
+    updateConfig({ env: { ...cfg.env, '': '' } });
+  }
+
+  // Args helpers (for stdio)
+  function setArg(idx, val) {
+    const args = [...(cfg.args || [])];
+    args[idx] = val;
+    updateConfig({ args });
+  }
+
+  function removeArg(idx) {
+    const args = [...(cfg.args || [])];
+    args.splice(idx, 1);
+    updateConfig({ args });
+  }
+
+  function addArg() {
+    updateConfig({ args: [...(cfg.args || []), ''] });
+  }
+
+  // Headers helpers (for http/sse)
+  const headerEntries = Object.entries(cfg.headers || {});
+
+  function setHeaderKey(oldKey, newKey) {
+    const headers = { ...cfg.headers };
+    const val = headers[oldKey];
+    delete headers[oldKey];
+    headers[newKey] = val;
+    updateConfig({ headers });
+  }
+
+  function setHeaderVal(key, val) {
+    updateConfig({ headers: { ...cfg.headers, [key]: val } });
+  }
+
+  function removeHeader(key) {
+    const headers = { ...cfg.headers };
+    delete headers[key];
+    updateConfig({ headers });
+  }
+
+  function addHeader() {
+    updateConfig({ headers: { ...cfg.headers, '': '' } });
+  }
+
+  // JSON preview with masked env values
+  function getMaskedConfig() {
+    const masked = { ...cfg };
+    if (masked.env) {
+      masked.env = {};
+      for (const [k, v] of Object.entries(cfg.env)) {
+        masked.env[k] = typeof v === 'string' && v.length > 6
+          ? v.slice(0, 6) + '•••'
+          : v;
+      }
+    }
+    return JSON.stringify(masked, null, 2);
+  }
+
+  return html`
+    <div>
+      <div class="back-nav">
+        <span class="back-link" onClick=${onBack}>← Back to list</span>
+      </div>
+      <div class="detail-header">
+        <span class="detail-title">${name}</span>
+        <span class="server-type type-${type}">${type}</span>
+        <span class="scope-badge">${scope}${scopePath ? ` — ${scopePath}` : ''}</span>
+      </div>
+
+      ${(type === 'stdio') && html`
+        <div class="config-section">
+          <h3>Command</h3>
+          <div class="field">
+            <div class="field-label">Command</div>
+            <input class="field-input" value=${cfg.command || ''}
+              onInput=${(e) => updateConfig({ command: e.target.value })} />
+          </div>
+          <div class="field">
+            <div class="field-label">Arguments</div>
+            <div class="row-group">
+              ${(cfg.args || []).map((arg, i) => html`
+                <div class="row-item" key=${i}>
+                  <input class="field-input" value=${arg}
+                    onInput=${(e) => setArg(i, e.target.value)} />
+                  <button class="row-remove" onClick=${() => removeArg(i)}>×</button>
+                </div>
+              `)}
+            </div>
+            <button class="btn btn-sm" style="margin-top:6px" onClick=${addArg}>+ Add arg</button>
+          </div>
+        </div>
+      `}
+
+      ${(type === 'http' || type === 'sse') && html`
+        <div class="config-section">
+          <h3>Connection</h3>
+          <div class="field">
+            <div class="field-label">URL</div>
+            <input class="field-input" value=${cfg.url || ''}
+              onInput=${(e) => updateConfig({ url: e.target.value })} />
+          </div>
+          <div class="field">
+            <div class="field-label">Headers</div>
+            <div class="row-group">
+              ${headerEntries.map(([key, val]) => html`
+                <div class="row-item" key=${key}>
+                  <input class="field-input row-key" value=${key} placeholder="Header name"
+                    onInput=${(e) => setHeaderKey(key, e.target.value)} />
+                  <input class="field-input" style="flex:1" value=${val} placeholder="Value"
+                    onInput=${(e) => setHeaderVal(key, e.target.value)} />
+                  <button class="row-remove" onClick=${() => removeHeader(key)}>×</button>
+                </div>
+              `)}
+            </div>
+            <button class="btn btn-sm" style="margin-top:6px" onClick=${addHeader}>+ Add header</button>
+          </div>
+        </div>
+      `}
+
+      <div class="config-section">
+        <h3>Environment Variables</h3>
+        <div class="row-group">
+          ${envEntries.map(([key, val]) => html`
+            <div class="row-item" key=${key}>
+              <input class="field-input row-key" value=${key} placeholder="VAR_NAME"
+                onInput=${(e) => setEnvKey(key, e.target.value)} />
+              <div class="secret-wrap">
+                <input class="field-input" type=${revealedKeys[key] ? 'text' : 'password'}
+                  value=${val} placeholder="value"
+                  onInput=${(e) => setEnvVal(key, e.target.value)} />
+                <button class="reveal-btn" onClick=${() => toggleReveal(key)}>
+                  ${revealedKeys[key] ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              <button class="row-remove" onClick=${() => removeEnv(key)}>×</button>
+            </div>
+          `)}
+        </div>
+        <button class="btn btn-sm" style="margin-top:6px" onClick=${addEnv}>+ Add variable</button>
+      </div>
+
+      <div class="config-section">
+        <h3>JSON Preview</h3>
+        <pre class="json-preview">${getMaskedConfig()}</pre>
+      </div>
+
+      <div class="danger-zone">
+        <h3>Danger Zone</h3>
+        <p>Remove this server from your configuration. This cannot be undone.</p>
+        <button class="btn btn-danger" onClick=${onRemove}>Remove server</button>
+      </div>
+    </div>
+  `;
+}
+
+// ─── App ───────────────────────────────────────────────────────
+function App() {
+  const [state, setState] = useState(null);
+  const [savedState, setSavedState] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null); // { scope, name, scopePath? }
+  const [toast, setToast] = useState(null);
+
+  const isDirty = useMemo(() => {
+    if (!state || !savedState) return false;
+    return JSON.stringify(state) !== savedState;
+  }, [state, savedState]);
+
+  const enabledCount = useMemo(() => {
+    if (!state) return 0;
+    let count = 0;
+    for (const entry of Object.values(state.servers?.user || {})) {
+      if (entry.enabled) count++;
+    }
+    for (const proj of Object.values(state.servers?.projects || {})) {
+      for (const entry of Object.values(proj)) {
+        if (entry.enabled) count++;
+      }
+    }
+    return count;
+  }, [state]);
+
+  function showToast(message, type = 'success') {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  const fetchServers = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await api('GET', '/api/servers');
+      setState(data);
+      setSavedState(JSON.stringify(data));
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchServers(); }, [fetchServers]);
+
+  const handleSave = useCallback(async () => {
+    if (!state) return;
+    try {
+      const data = await api('PUT', '/api/servers', state);
+      setState(data);
+      setSavedState(JSON.stringify(data));
+      showToast('Saved successfully');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }, [state]);
+
+  const handleImport = useCallback(async () => {
+    try {
+      const data = await api('POST', '/api/import');
+      setState(data);
+      setSavedState(JSON.stringify(data));
+      showToast('Imported from config files');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }, []);
+
+  // Cmd/Ctrl+S shortcut
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        if (isDirty) handleSave();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isDirty, handleSave]);
+
+  // Toggle helpers
+  function toggleUserServer(name) {
+    setState(prev => ({
+      ...prev,
+      servers: {
+        ...prev.servers,
+        user: {
+          ...prev.servers.user,
+          [name]: { ...prev.servers.user[name], enabled: !prev.servers.user[name].enabled },
+        },
+      },
+    }));
+  }
+
+  function toggleProjectServer(projectPath, name) {
+    setState(prev => ({
+      ...prev,
+      servers: {
+        ...prev.servers,
+        projects: {
+          ...prev.servers.projects,
+          [projectPath]: {
+            ...prev.servers.projects[projectPath],
+            [name]: {
+              ...prev.servers.projects[projectPath][name],
+              enabled: !prev.servers.projects[projectPath][name].enabled,
+            },
+          },
+        },
+      },
+    }));
+  }
+
+  function toggleClaudeAi() {
+    setState(prev => ({ ...prev, claudeAiMcps: !prev.claudeAiMcps }));
+  }
+
+  // Detail view handlers
+  function handleDetailChange(entry) {
+    if (!selected) return;
+    if (selected.scope === 'user') {
+      setState(prev => ({
+        ...prev,
+        servers: {
+          ...prev.servers,
+          user: { ...prev.servers.user, [selected.name]: entry },
+        },
+      }));
+    } else {
+      setState(prev => ({
+        ...prev,
+        servers: {
+          ...prev.servers,
+          projects: {
+            ...prev.servers.projects,
+            [selected.scopePath]: {
+              ...prev.servers.projects[selected.scopePath],
+              [selected.name]: entry,
+            },
+          },
+        },
+      }));
+    }
+  }
+
+  function handleRemove() {
+    if (!selected) return;
+    if (selected.scope === 'user') {
+      setState(prev => {
+        const user = { ...prev.servers.user };
+        delete user[selected.name];
+        return { ...prev, servers: { ...prev.servers, user } };
+      });
+    } else {
+      setState(prev => {
+        const proj = { ...prev.servers.projects[selected.scopePath] };
+        delete proj[selected.name];
+        return {
+          ...prev,
+          servers: {
+            ...prev.servers,
+            projects: { ...prev.servers.projects, [selected.scopePath]: proj },
+          },
+        };
+      });
+    }
+    setSelected(null);
+  }
+
+  if (loading) {
+    return html`<div class="loading">Loading servers...</div>`;
+  }
+
+  if (!state) {
+    return html`<div class="loading">Failed to load. Check your token.</div>`;
+  }
+
+  // Detail view
+  if (selected) {
+    const entry = selected.scope === 'user'
+      ? state.servers.user[selected.name]
+      : state.servers.projects[selected.scopePath]?.[selected.name];
+
+    if (!entry) {
+      setSelected(null);
+      return null;
+    }
+
+    return html`
+      <div class="app-shell">
+        <${DetailView}
+          name=${selected.name}
+          entry=${entry}
+          scope=${selected.scope}
+          scopePath=${selected.scopePath}
+          onChange=${handleDetailChange}
+          onBack=${() => setSelected(null)}
+          onRemove=${handleRemove}
+        />
+        ${toast && html`<div class="toast toast-${toast.type}">${toast.message}</div>`}
+        <div class="status-bar">
+          <div class="status-info">
+            ${isDirty && html`<span class="unsaved-dot" />`}
+            ${isDirty ? 'Unsaved changes' : 'All saved'}
+          </div>
+          <div class="status-actions">
+            <button class="btn btn-primary" disabled=${!isDirty} onClick=${handleSave}>
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // List view
+  const projectEntries = Object.entries(state.servers.projects || {});
+  const hasServers = Object.keys(state.servers.user || {}).length > 0 || projectEntries.length > 0;
+
+  return html`
+    <div class="app-shell">
+      <div class="app-header">
+        <h1>MCP Man</h1>
+        <div class="header-actions">
+          <button class="btn" onClick=${handleImport}>↻ Import</button>
+        </div>
+      </div>
+
+      <div class="claude-ai-row">
+        <div class="claude-ai-info">
+          <div class="claude-ai-label">Claude.ai MCP Servers</div>
+          <div class="claude-ai-hint">Allow Claude.ai to use its built-in MCP servers</div>
+        </div>
+        <${Toggle} checked=${state.claudeAiMcps} onChange=${toggleClaudeAi} />
+      </div>
+
+      ${!hasServers && html`
+        <div class="empty-state">
+          <p>No MCP servers found.</p>
+          <button class="btn btn-primary" onClick=${handleImport}>Import from config</button>
+        </div>
+      `}
+
+      <${ScopeSection}
+        label="User"
+        servers=${state.servers.user}
+        onToggle=${toggleUserServer}
+        onSelect=${(name) => setSelected({ scope: 'user', name })}
+      />
+
+      ${projectEntries.map(([projectPath, servers]) => html`
+        <${ScopeSection}
+          key=${projectPath}
+          label="Project"
+          path=${projectPath}
+          servers=${servers}
+          onToggle=${(name) => toggleProjectServer(projectPath, name)}
+          onSelect=${(name) => setSelected({ scope: 'project', name, scopePath: projectPath })}
+        />
+      `)}
+
+      ${toast && html`<div class="toast toast-${toast.type}">${toast.message}</div>`}
+
+      <div class="status-bar">
+        <div class="status-info">
+          ${isDirty && html`<span class="unsaved-dot" />`}
+          <span>${enabledCount} server${enabledCount !== 1 ? 's' : ''} enabled</span>
+          ${isDirty && html`<span> · Unsaved changes</span>`}
+        </div>
+        <div class="status-actions">
+          <button class="btn btn-primary" disabled=${!isDirty} onClick=${handleSave}>
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+render(html`<${App} />`, document.getElementById('app'));
+</script>
+</body>
+</html>
