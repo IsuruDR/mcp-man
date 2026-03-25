@@ -433,12 +433,15 @@ body {
 }
 
 /* Claude.ai toggle row */
-.claude-ai-row {
+.claude-ai-section {
   background: #18181b;
   border: 1px solid #27272a;
   border-radius: 10px;
-  padding: 14px 16px;
   margin-bottom: 24px;
+  overflow: hidden;
+}
+.claude-ai-row {
+  padding: 14px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -446,6 +449,37 @@ body {
 .claude-ai-info { flex: 1; }
 .claude-ai-label { font-size: 0.875rem; font-weight: 600; }
 .claude-ai-hint { font-size: 0.75rem; color: #71717a; margin-top: 2px; }
+.claude-ai-list {
+  border-top: 1px solid #27272a;
+  padding: 8px 0;
+}
+.claude-ai-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  font-size: 0.8125rem;
+}
+.claude-ai-item-name { color: #e4e4e7; }
+.claude-ai-item-status {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.claude-ai-item-status.connected {
+  color: #4ade80;
+  background: #14532d;
+}
+.claude-ai-item-status.disconnected {
+  color: #71717a;
+  background: #27272a;
+}
+.claude-ai-manage {
+  border-top: 1px solid #27272a;
+  padding: 10px 16px;
+  font-size: 0.75rem;
+  color: #52525b;
+}
 
 /* Empty state */
 .empty-state {
@@ -799,6 +833,7 @@ function App() {
   const [selected, setSelected] = useState(null); // { scope, name, scopePath? }
   const [toast, setToast] = useState(null);
   const [needsRestart, setNeedsRestart] = useState(false);
+  const [claudeAiConnected, setClaudeAiConnected] = useState([]);
 
   const isDirty = useMemo(() => {
     if (!state || !savedState) return false;
@@ -827,9 +862,13 @@ function App() {
   const fetchServers = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await api('GET', '/api/servers');
+      const [data, mcps] = await Promise.all([
+        api('GET', '/api/servers'),
+        api('GET', '/api/claude-ai-mcps'),
+      ]);
       setState(data);
       setSavedState(JSON.stringify(data));
+      setClaudeAiConnected(mcps.connected || []);
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -1076,12 +1115,25 @@ function App() {
         </div>
       </div>
 
-      <div class="claude-ai-row">
-        <div class="claude-ai-info">
-          <div class="claude-ai-label">Claude.ai MCP Servers</div>
-          <div class="claude-ai-hint">Allow Claude.ai to use its built-in MCP servers</div>
+      <div class="claude-ai-section">
+        <div class="claude-ai-row">
+          <div class="claude-ai-info">
+            <div class="claude-ai-label">Claude.ai MCP Servers</div>
+            <div class="claude-ai-hint">Allow Claude.ai to use its built-in MCP servers</div>
+          </div>
+          <${Toggle} checked=${state.claudeAiMcps} onChange=${toggleClaudeAi} />
         </div>
-        <${Toggle} checked=${state.claudeAiMcps} onChange=${toggleClaudeAi} />
+        ${state.claudeAiMcps && claudeAiConnected.length > 0 && html`
+          <div class="claude-ai-list">
+            ${claudeAiConnected.map(name => html`
+              <div class="claude-ai-item" key=${name}>
+                <span class="claude-ai-item-name">${name.replace('claude.ai ', '')}</span>
+                <span class="claude-ai-item-status connected">connected</span>
+              </div>
+            `)}
+          </div>
+          <div class="claude-ai-manage">Use /mcp in Claude Code to connect or disconnect individual servers</div>
+        `}
       </div>
 
       ${!hasServers && html`

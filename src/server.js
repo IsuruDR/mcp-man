@@ -46,6 +46,15 @@ export function createApp({ manager }) {
     }
   });
 
+  app.get('/api/claude-ai-mcps', async (req, res) => {
+    try {
+      const connected = await manager.getConnectedClaudeAiMcps();
+      res.json({ connected });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get('/api/projects', async (req, res) => {
     try {
       const state = await manager.getState();

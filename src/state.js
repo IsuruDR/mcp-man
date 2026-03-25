@@ -117,6 +117,16 @@ export class StateManager {
     await this.#persist();
   }
 
+  async getConnectedClaudeAiMcps() {
+    try {
+      const content = await fs.readFile(this.#claudeJsonPath, 'utf-8');
+      const data = JSON.parse(content);
+      return data.claudeAiMcpEverConnected || [];
+    } catch {
+      return [];
+    }
+  }
+
   async #persist() {
     await fs.mkdir(this.#stateDir, { recursive: true });
     await fs.writeFile(this.#statePath, JSON.stringify(this.#state, null, 2) + '\n');
