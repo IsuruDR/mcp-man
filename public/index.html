@@ -43,7 +43,12 @@ body {
   border-bottom: 1px solid #27272a;
   margin-bottom: 20px;
 }
-.app-header h1 { font-size: 1.25rem; font-weight: 600; }
+.app-header h1 { font-size: 1.25rem; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+.app-logo {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
 .header-actions { display: flex; gap: 8px; }
 
 /* Buttons */
@@ -223,6 +228,43 @@ body {
   50% { opacity: 0.4; }
 }
 
+/* Restart banner */
+.restart-banner {
+  position: fixed;
+  bottom: 53px;
+  left: 0;
+  right: 0;
+  background: #422006;
+  border-top: 1px solid #854d0e;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  z-index: 99;
+  font-size: 0.8125rem;
+  color: #fbbf24;
+  animation: bannerSlideUp 0.25s ease-out;
+}
+.restart-banner-icon { font-size: 1rem; flex-shrink: 0; }
+.restart-banner-text { font-weight: 500; }
+.restart-banner-dismiss {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  color: #a16207;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 4px;
+  line-height: 1;
+}
+.restart-banner-dismiss:hover { color: #fbbf24; }
+@keyframes bannerSlideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
 /* Toast */
 .toast {
   position: fixed;
@@ -337,18 +379,21 @@ body {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 4px;
   position: relative;
 }
-.secret-wrap .field-input { flex: 1; }
+.secret-wrap .field-input { flex: 1; padding-right: 32px; }
 .reveal-btn {
+  position: absolute;
+  right: 8px;
   background: none;
   border: none;
-  color: #71717a;
+  color: #52525b;
   cursor: pointer;
-  font-size: 0.75rem;
-  padding: 4px 6px;
-  white-space: nowrap;
+  font-size: 0.875rem;
+  padding: 4px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
 }
 .reveal-btn:hover { color: #a1a1aa; }
 
@@ -420,13 +465,10 @@ import { useState, useEffect, useCallback, useMemo } from 'https://esm.sh/preact
 import htm from 'https://esm.sh/htm@3.1.1';
 
 const html = htm.bind(h);
-const TOKEN = new URLSearchParams(window.location.search).get('token');
-
 async function api(method, path, body) {
   const opts = {
     method,
     headers: {
-      'Authorization': `Bearer ${TOKEN}`,
       'Content-Type': 'application/json',
     },
   };
@@ -478,11 +520,13 @@ function getServerType(cfg) {
 
 function getConnectionDetail(cfg) {
   if (cfg.url) return cfg.url;
-  if (cfg.command) {
-    const args = cfg.args ? ' ' + cfg.args.join(' ') : '';
-    return cfg.command + args;
-  }
+  if (cfg.command) return cfg.command;
   return '';
+}
+
+const SENSITIVE_PATTERN = /key|secret|token|password|credential|auth/i;
+function isSensitive(name) {
+  return SENSITIVE_PATTERN.test(name);
 }
 
 // ─── ScopeSection ──────────────────────────────────────────────
@@ -510,8 +554,8 @@ function ScopeSection({ label, path: scopePath, servers, onToggle, onSelect }) {
 }
 
 // ─── DetailView ────────────────────────────────────────────────
-function DetailView({ name, entry, scope, scopePath, onChange, onBack, onRemove }) {
-  const [revealedKeys, setRevealedKeys] = useState({});
+function DetailView({ name, entry, scope, scopePath, onChange, onBack, onRemove, onSave, isDirty }) {
+  const [revealed, setRevealed] = useState({});
   const cfg = entry.config || {};
   const type = getServerType(cfg);
 
@@ -519,8 +563,8 @@ function DetailView({ name, entry, scope, scopePath, onChange, onBack, onRemove 
     onChange({ ...entry, config: { ...cfg, ...updates } });
   }
 
-  function toggleReveal(key) {
-    setRevealedKeys(prev => ({ ...prev, [key]: !prev[key] }));
+  function toggleReveal(id) {
+    setRevealed(prev => ({ ...prev, [id]: !prev[id] }));
   }
 
   // Env var helpers
@@ -590,16 +634,29 @@ function DetailView({ name, entry, scope, scopePath, onChange, onBack, onRemove 
     updateConfig({ headers: { ...cfg.headers, '': '' } });
   }
 
-  // JSON preview with masked env values
+  // JSON preview with masked sensitive values
   function getMaskedConfig() {
     const masked = { ...cfg };
+    function maskValue(v) {
+      return typeof v === 'string' && v.length > 4 ? v.slice(0, 4) + '••••' : '••••';
+    }
     if (masked.env) {
       masked.env = {};
       for (const [k, v] of Object.entries(cfg.env)) {
-        masked.env[k] = typeof v === 'string' && v.length > 6
-          ? v.slice(0, 6) + '•••'
-          : v;
+        masked.env[k] = isSensitive(k) ? maskValue(v) : v;
       }
+    }
+    if (masked.headers) {
+      masked.headers = {};
+      for (const [k, v] of Object.entries(cfg.headers)) {
+        masked.headers[k] = isSensitive(k) ? maskValue(v) : v;
+      }
+    }
+    if (masked.args) {
+      masked.args = masked.args.map((arg, i, arr) => {
+        const prev = i > 0 ? arr[i - 1] : '';
+        return isSensitive(prev) && !arg.startsWith('-') ? maskValue(arg) : arg;
+      });
     }
     return JSON.stringify(masked, null, 2);
   }
@@ -626,13 +683,25 @@ function DetailView({ name, entry, scope, scopePath, onChange, onBack, onRemove 
           <div class="field">
             <div class="field-label">Arguments</div>
             <div class="row-group">
-              ${(cfg.args || []).map((arg, i) => html`
-                <div class="row-item" key=${i}>
-                  <input class="field-input" value=${arg}
-                    onInput=${(e) => setArg(i, e.target.value)} />
-                  <button class="row-remove" onClick=${() => removeArg(i)}>×</button>
-                </div>
-              `)}
+              ${(cfg.args || []).map((arg, i, arr) => {
+                const prevArg = i > 0 ? arr[i - 1] : '';
+                const sensitive = isSensitive(prevArg) && !arg.startsWith('-');
+                return html`
+                  <div class="row-item" key=${i}>
+                    <div class="secret-wrap">
+                      <input class="field-input" type=${sensitive && !revealed['arg-'+i] ? 'password' : 'text'}
+                        value=${arg} onInput=${(e) => setArg(i, e.target.value)} />
+                      ${sensitive && html`<button class="reveal-btn" onClick=${() => toggleReveal('arg-'+i)}>
+                        ${revealed['arg-'+i]
+                          ? html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
+                          : html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+                        }
+                      </button>`}
+                    </div>
+                    <button class="row-remove" onClick=${() => removeArg(i)}>×</button>
+                  </div>
+                `;
+              })}
             </div>
             <button class="btn btn-sm" style="margin-top:6px" onClick=${addArg}>+ Add arg</button>
           </div>
@@ -650,15 +719,27 @@ function DetailView({ name, entry, scope, scopePath, onChange, onBack, onRemove 
           <div class="field">
             <div class="field-label">Headers</div>
             <div class="row-group">
-              ${headerEntries.map(([key, val]) => html`
-                <div class="row-item" key=${key}>
-                  <input class="field-input row-key" value=${key} placeholder="Header name"
-                    onInput=${(e) => setHeaderKey(key, e.target.value)} />
-                  <input class="field-input" style="flex:1" value=${val} placeholder="Value"
-                    onInput=${(e) => setHeaderVal(key, e.target.value)} />
-                  <button class="row-remove" onClick=${() => removeHeader(key)}>×</button>
-                </div>
-              `)}
+              ${headerEntries.map(([key, val], idx) => {
+                const sensitive = isSensitive(key);
+                return html`
+                  <div class="row-item" key=${idx}>
+                    <input class="field-input row-key" value=${key} placeholder="Header name"
+                      onInput=${(e) => setHeaderKey(key, e.target.value)} />
+                    <div class="secret-wrap">
+                      <input class="field-input" type=${sensitive && !revealed['hdr-'+idx] ? 'password' : 'text'}
+                        value=${val} placeholder="Value"
+                        onInput=${(e) => setHeaderVal(key, e.target.value)} />
+                      ${sensitive && html`<button class="reveal-btn" onClick=${() => toggleReveal('hdr-'+idx)}>
+                        ${revealed['hdr-'+idx]
+                        ? html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
+                        : html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+                      }
+                      </button>`}
+                    </div>
+                    <button class="row-remove" onClick=${() => removeHeader(key)}>×</button>
+                  </div>
+                `;
+              })}
             </div>
             <button class="btn btn-sm" style="margin-top:6px" onClick=${addHeader}>+ Add header</button>
           </div>
@@ -668,16 +749,19 @@ function DetailView({ name, entry, scope, scopePath, onChange, onBack, onRemove 
       <div class="config-section">
         <h3>Environment Variables</h3>
         <div class="row-group">
-          ${envEntries.map(([key, val]) => html`
-            <div class="row-item" key=${key}>
+          ${envEntries.map(([key, val], idx) => html`
+            <div class="row-item" key=${idx}>
               <input class="field-input row-key" value=${key} placeholder="VAR_NAME"
                 onInput=${(e) => setEnvKey(key, e.target.value)} />
               <div class="secret-wrap">
-                <input class="field-input" type=${revealedKeys[key] ? 'text' : 'password'}
+                <input class="field-input" type=${revealed['env-'+idx] ? 'text' : 'password'}
                   value=${val} placeholder="value"
                   onInput=${(e) => setEnvVal(key, e.target.value)} />
-                <button class="reveal-btn" onClick=${() => toggleReveal(key)}>
-                  ${revealedKeys[key] ? 'Hide' : 'Show'}
+                <button class="reveal-btn" onClick=${() => toggleReveal('env-'+idx)}>
+                  ${revealed['env-'+idx]
+                    ? html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
+                    : html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+                  }
                 </button>
               </div>
               <button class="row-remove" onClick=${() => removeEnv(key)}>×</button>
@@ -697,6 +781,12 @@ function DetailView({ name, entry, scope, scopePath, onChange, onBack, onRemove 
         <p>Remove this server from your configuration. This cannot be undone.</p>
         <button class="btn btn-danger" onClick=${onRemove}>Remove server</button>
       </div>
+
+      <div style="margin-top: 24px;">
+        <button class="btn btn-primary" disabled=${!isDirty} onClick=${onSave}>
+          Save changes
+        </button>
+      </div>
     </div>
   `;
 }
@@ -708,6 +798,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null); // { scope, name, scopePath? }
   const [toast, setToast] = useState(null);
+  const [needsRestart, setNeedsRestart] = useState(false);
 
   const isDirty = useMemo(() => {
     if (!state || !savedState) return false;
@@ -748,16 +839,20 @@ function App() {
 
   useEffect(() => { fetchServers(); }, [fetchServers]);
 
-  const handleSave = useCallback(async () => {
-    if (!state) return;
+  async function saveState(newState) {
     try {
-      const data = await api('PUT', '/api/servers', state);
+      const data = await api('PUT', '/api/servers', newState);
       setState(data);
       setSavedState(JSON.stringify(data));
-      showToast('Saved successfully');
+      setNeedsRestart(true);
     } catch (err) {
       showToast(err.message, 'error');
     }
+  }
+
+  const handleSave = useCallback(async () => {
+    if (!state) return;
+    await saveState(state);
   }, [state]);
 
   const handleImport = useCallback(async () => {
@@ -783,41 +878,47 @@ function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [isDirty, handleSave]);
 
-  // Toggle helpers
+  // Toggle helpers (auto-save)
   function toggleUserServer(name) {
-    setState(prev => ({
-      ...prev,
+    const newState = {
+      ...state,
       servers: {
-        ...prev.servers,
+        ...state.servers,
         user: {
-          ...prev.servers.user,
-          [name]: { ...prev.servers.user[name], enabled: !prev.servers.user[name].enabled },
+          ...state.servers.user,
+          [name]: { ...state.servers.user[name], enabled: !state.servers.user[name].enabled },
         },
       },
-    }));
+    };
+    setState(newState);
+    saveState(newState);
   }
 
   function toggleProjectServer(projectPath, name) {
-    setState(prev => ({
-      ...prev,
+    const newState = {
+      ...state,
       servers: {
-        ...prev.servers,
+        ...state.servers,
         projects: {
-          ...prev.servers.projects,
+          ...state.servers.projects,
           [projectPath]: {
-            ...prev.servers.projects[projectPath],
+            ...state.servers.projects[projectPath],
             [name]: {
-              ...prev.servers.projects[projectPath][name],
-              enabled: !prev.servers.projects[projectPath][name].enabled,
+              ...state.servers.projects[projectPath][name],
+              enabled: !state.servers.projects[projectPath][name].enabled,
             },
           },
         },
       },
-    }));
+    };
+    setState(newState);
+    saveState(newState);
   }
 
   function toggleClaudeAi() {
-    setState(prev => ({ ...prev, claudeAiMcps: !prev.claudeAiMcps }));
+    const newState = { ...state, claudeAiMcps: !state.claudeAiMcps };
+    setState(newState);
+    saveState(newState);
   }
 
   // Detail view handlers
@@ -899,19 +1000,27 @@ function App() {
           scope=${selected.scope}
           scopePath=${selected.scopePath}
           onChange=${handleDetailChange}
-          onBack=${() => setSelected(null)}
+          onBack=${() => {
+            if (isDirty && !confirm('You have unsaved changes. Discard and go back?')) return;
+            setState(JSON.parse(savedState));
+            setSelected(null);
+          }}
           onRemove=${handleRemove}
+          onSave=${handleSave}
+          isDirty=${isDirty}
         />
         ${toast && html`<div class="toast toast-${toast.type}">${toast.message}</div>`}
+        ${needsRestart && html`
+          <div class="restart-banner">
+            <span class="restart-banner-icon">\u26A0</span>
+            <span class="restart-banner-text">Restart Claude for changes to take effect</span>
+            <button class="restart-banner-dismiss" onClick=${() => setNeedsRestart(false)}>\u2715</button>
+          </div>
+        `}
         <div class="status-bar">
           <div class="status-info">
             ${isDirty && html`<span class="unsaved-dot" />`}
             ${isDirty ? 'Unsaved changes' : 'All saved'}
-          </div>
-          <div class="status-actions">
-            <button class="btn btn-primary" disabled=${!isDirty} onClick=${handleSave}>
-              Save
-            </button>
           </div>
         </div>
       </div>
@@ -925,7 +1034,43 @@ function App() {
   return html`
     <div class="app-shell">
       <div class="app-header">
-        <h1>MCP Man</h1>
+        <h1>
+          <svg class="app-logo" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Head -->
+            <circle cx="32" cy="18" r="12" fill="#7c3aed"/>
+            <!-- Eyes (glowing) -->
+            <circle cx="27" cy="16" r="2.5" fill="#fff"/>
+            <circle cx="37" cy="16" r="2.5" fill="#fff"/>
+            <circle cx="27" cy="16" r="1" fill="#0a0a0b"/>
+            <circle cx="37" cy="16" r="1" fill="#0a0a0b"/>
+            <!-- Mouth -->
+            <path d="M27 22 Q32 26 37 22" stroke="#fff" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+            <!-- Body -->
+            <rect x="24" y="30" width="16" height="16" rx="4" fill="#7c3aed"/>
+            <!-- Connection nodes on body (MCP plugs) -->
+            <circle cx="29" cy="36" r="2" fill="#a78bfa"/>
+            <circle cx="35" cy="36" r="2" fill="#a78bfa"/>
+            <circle cx="32" cy="42" r="2" fill="#a78bfa"/>
+            <!-- Arms (cables) -->
+            <path d="M24 34 Q16 34 14 28" stroke="#a78bfa" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+            <path d="M40 34 Q48 34 50 28" stroke="#a78bfa" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+            <!-- Arm plugs -->
+            <circle cx="14" cy="27" r="2.5" fill="#c4b5fd"/>
+            <circle cx="50" cy="27" r="2.5" fill="#c4b5fd"/>
+            <!-- Legs -->
+            <path d="M28 46 L26 56" stroke="#a78bfa" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M36 46 L38 56" stroke="#a78bfa" stroke-width="2.5" stroke-linecap="round"/>
+            <!-- Feet (plugs) -->
+            <rect x="22" y="54" width="8" height="4" rx="2" fill="#c4b5fd"/>
+            <rect x="34" y="54" width="8" height="4" rx="2" fill="#c4b5fd"/>
+            <!-- Antenna -->
+            <line x1="32" y1="6" x2="32" y2="2" stroke="#a78bfa" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="32" cy="1" r="2" fill="#c4b5fd">
+              <animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite"/>
+            </circle>
+          </svg>
+          MCP Man
+        </h1>
         <div class="header-actions">
           <button class="btn" onClick=${handleImport}>↻ Import</button>
         </div>
@@ -966,16 +1111,16 @@ function App() {
 
       ${toast && html`<div class="toast toast-${toast.type}">${toast.message}</div>`}
 
+      ${needsRestart && html`
+        <div class="restart-banner">
+          <span class="restart-banner-icon">\u26A0</span>
+          <span class="restart-banner-text">Restart Claude for changes to take effect</span>
+          <button class="restart-banner-dismiss" onClick=${() => setNeedsRestart(false)}>\u2715</button>
+        </div>
+      `}
       <div class="status-bar">
         <div class="status-info">
-          ${isDirty && html`<span class="unsaved-dot" />`}
           <span>${enabledCount} server${enabledCount !== 1 ? 's' : ''} enabled</span>
-          ${isDirty && html`<span> · Unsaved changes</span>`}
-        </div>
-        <div class="status-actions">
-          <button class="btn btn-primary" disabled=${!isDirty} onClick=${handleSave}>
-            Save
-          </button>
         </div>
       </div>
     </div>

@@ -5,19 +5,10 @@ import { validateState } from './validation.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export function createApp({ manager, token }) {
+export function createApp({ manager }) {
   const app = express();
   app.use(express.json());
   app.use(express.static(path.join(__dirname, '..', 'public')));
-
-  // Auth middleware for /api routes
-  app.use('/api', (req, res, next) => {
-    const auth = req.headers.authorization;
-    if (auth !== `Bearer ${token}`) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    next();
-  });
 
   app.get('/api/servers', async (req, res) => {
     try {

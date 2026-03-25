@@ -7,14 +7,14 @@ function isProcessRunning(pid) {
   try { process.kill(pid, 0); return true; } catch { return false; }
 }
 
-export async function acquireLock(lockDir, { port, token, pid = process.pid }) {
+export async function acquireLock(lockDir, { port, pid = process.pid }) {
   const lockPath = path.join(lockDir, LOCK_FILE);
   const existing = await readLock(lockDir);
   if (existing && isProcessRunning(existing.pid)) {
-    return { acquired: false, existingPort: existing.port, existingToken: existing.token };
+    return { acquired: false, existingPort: existing.port };
   }
   await fs.mkdir(lockDir, { recursive: true });
-  await fs.writeFile(lockPath, JSON.stringify({ port, token, pid }));
+  await fs.writeFile(lockPath, JSON.stringify({ port, pid }));
   return { acquired: true };
 }
 

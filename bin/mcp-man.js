@@ -2,7 +2,7 @@
 
 import path from 'node:path';
 import os from 'node:os';
-import crypto from 'node:crypto';
+import { execSync, spawn } from 'node:child_process';
 import { StateManager } from '../src/state.js';
 import { createApp } from '../src/server.js';
 import { acquireLock, releaseLock } from '../src/lock.js';
@@ -39,16 +39,56 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
+// Re-exec through portless if available and not already running under it
+const runningUnderPortless = !!process.env.PORTLESS_URL;
+
+if (!runningUnderPortless && !args.includes('--no-portless')) {
+  let hasPortless = false;
+  try {
+    execSync('portless --version', { stdio: 'ignore' });
+    hasPortless = true;
+  } catch {
+    // portless not installed — install it
+    console.log('  Installing portless for a nice local URL...');
+    try {
+      execSync('npm install -g portless', { stdio: 'inherit' });
+      hasPortless = true;
+    } catch {
+      console.log('  Could not install portless, using default localhost URL.\n');
+    }
+  }
+
+  if (hasPortless) {
+    const scriptPath = path.resolve(new URL(import.meta.url).pathname);
+    const child = spawn('portless', ['mcp-man', 'node', scriptPath, ...process.argv.slice(2)], {
+      stdio: ['inherit', 'pipe', 'inherit'],
+      env: process.env,
+    });
+    // Filter out portless banner lines, forward our app's output
+    let seenOutput = false;
+    child.stdout.on('data', (data) => {
+      for (const line of data.toString().split('\n')) {
+        if (/^(portless|--|Starting|HTTP proxy|Proxy started|Running:|Using port|\s*->)/.test(line.trim())) continue;
+        if (line.trim() === '' && !seenOutput) continue;
+        seenOutput = true;
+        process.stdout.write(line + '\n');
+      }
+    });
+    child.on('exit', (code) => process.exit(code ?? 0));
+    process.on('SIGINT', () => child.kill('SIGINT'));
+    process.on('SIGTERM', () => child.kill('SIGTERM'));
+    await new Promise(() => {});
+  }
+}
+
 const homeDir = os.homedir();
 const stateDir = path.join(homeDir, '.mcp-man');
 const claudeJsonPath = path.join(homeDir, '.claude.json');
 const settingsJsonPath = path.join(homeDir, '.claude', 'settings.json');
-const token = crypto.randomBytes(24).toString('hex');
-
 // Single instance check
-const lockResult = await acquireLock(stateDir, { port: 0, token });
+const lockResult = await acquireLock(stateDir, { port: 0 });
 if (!lockResult.acquired) {
-  const url = `http://localhost:${lockResult.existingPort}?token=${lockResult.existingToken}`;
+  const url = `http://localhost:${lockResult.existingPort}`;
   console.log(`mcp-man is already running at ${url}`);
   const open = (await import('open')).default;
   await open(url);
@@ -60,14 +100,16 @@ const manager = new StateManager({ stateDir, claudeJsonPath, settingsJsonPath, p
 await manager.load();
 await manager.importFromConfig();
 
-const app = createApp({ manager, token });
+const app = createApp({ manager });
 
-// Find available port
+// Use PORT from portless if available, otherwise find available port
+const assignedPort = process.env.PORT ? parseInt(process.env.PORT, 10) : null;
+
 function listen(app, port) {
   return new Promise((resolve, reject) => {
     const server = app.listen(port, '127.0.0.1', () => resolve(server))
       .on('error', (err) => {
-        if (err.code === 'EADDRINUSE' && port < DEFAULT_PORT_START + 100) {
+        if (!assignedPort && err.code === 'EADDRINUSE' && port < DEFAULT_PORT_START + 100) {
           resolve(listen(app, port + 1));
         } else {
           reject(err);
@@ -76,13 +118,14 @@ function listen(app, port) {
   });
 }
 
-const server = await listen(app, DEFAULT_PORT_START);
+const server = await listen(app, assignedPort || DEFAULT_PORT_START);
 const port = server.address().port;
 
 // Update lock with actual port
-await acquireLock(stateDir, { port, token });
+await acquireLock(stateDir, { port });
 
-const url = `http://localhost:${port}?token=${token}`;
+const portlessBaseUrl = process.env.PORTLESS_URL;
+const url = portlessBaseUrl || `http://localhost:${port}`;
 console.log(`\n  ⚡ mcp-man running at ${url}\n`);
 
 // Auto-open browser
