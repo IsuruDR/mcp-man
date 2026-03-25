@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp"
+    },
+    "mermaid": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@mermaid-js/mermaid-mcp-server"]
+    }
+  },
+  "otherStuff": {
+    "keep": "this"
+  }
+}
