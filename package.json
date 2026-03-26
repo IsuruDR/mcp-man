@@ -6,11 +6,11 @@
   "author": "Isuru Ranaweera",
   "repository": {
     "type": "git",
-    "url": "https://github.com/isurur/mcp-man"
+    "url": "https://github.com/IsuruDR/mcp-man"
   },
-  "homepage": "https://github.com/isurur/mcp-man#readme",
+  "homepage": "https://github.com/IsuruDR/mcp-man#readme",
   "bugs": {
-    "url": "https://github.com/isurur/mcp-man/issues"
+    "url": "https://github.com/IsuruDR/mcp-man/issues"
   },
   "bin": {
     "mcp-man": "./bin/mcp-man.js"
