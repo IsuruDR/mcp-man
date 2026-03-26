@@ -96,14 +96,15 @@ const stateDir = path.join(homeDir, '.mcp-man');
 const claudeJsonPath = path.join(homeDir, '.claude.json');
 const settingsJsonPath = path.join(homeDir, '.claude', 'settings.json');
 // Single instance check
-const lockResult = await acquireLock(stateDir, { port: 0 });
-if (!lockResult.acquired) {
+const lockResult = await acquireLock(stateDir, { port: -1 });
+if (!lockResult.acquired && lockResult.existingPort > 0) {
   const url = `http://localhost:${lockResult.existingPort}`;
   console.log(`mcp-man is already running at ${url}`);
   const open = (await import('open')).default;
   await open(url);
   process.exit(0);
 }
+// Stale lock with port 0/-1 means previous run crashed before starting — proceed normally
 
 // Create state manager and server
 const manager = new StateManager({ stateDir, claudeJsonPath, settingsJsonPath, projectPaths });

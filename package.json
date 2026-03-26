@@ -1,6 +1,6 @@
 {
   "name": "@isurur/mcp-man",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Visual MCP server manager for Claude Code",
   "type": "module",
   "author": "Isuru Ranaweera",
