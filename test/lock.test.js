@@ -16,33 +16,32 @@ describe('Lock', () => {
   afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
 
   it('acquires lock when no lock exists', async () => {
-    const result = await acquireLock(lockDir, { port: 4242, token: 'abc' });
+    const result = await acquireLock(lockDir, { port: 4242 });
     assert.strictEqual(result.acquired, true);
   });
 
   it('reads lock info after acquiring', async () => {
-    await acquireLock(lockDir, { port: 4242, token: 'abc' });
+    await acquireLock(lockDir, { port: 4242 });
     const info = await readLock(lockDir);
     assert.strictEqual(info.port, 4242);
-    assert.strictEqual(info.token, 'abc');
   });
 
   it('fails to acquire when lock already exists with running pid', async () => {
-    await acquireLock(lockDir, { port: 4242, token: 'abc', pid: process.pid });
-    const result = await acquireLock(lockDir, { port: 5000, token: 'def' });
+    await acquireLock(lockDir, { port: 4242, pid: process.pid });
+    const result = await acquireLock(lockDir, { port: 5000 });
     assert.strictEqual(result.acquired, false);
     assert.strictEqual(result.existingPort, 4242);
   });
 
   it('steals stale lock when pid is dead', async () => {
     fs.mkdirSync(lockDir, { recursive: true });
-    fs.writeFileSync(path.join(lockDir, '.lock'), JSON.stringify({ port: 4242, token: 'old', pid: 999999 }));
-    const result = await acquireLock(lockDir, { port: 5000, token: 'new' });
+    fs.writeFileSync(path.join(lockDir, '.lock'), JSON.stringify({ port: 4242, pid: 999999 }));
+    const result = await acquireLock(lockDir, { port: 5000 });
     assert.strictEqual(result.acquired, true);
   });
 
   it('releases lock by removing file', async () => {
-    await acquireLock(lockDir, { port: 4242, token: 'abc' });
+    await acquireLock(lockDir, { port: 4242 });
     await releaseLock(lockDir);
     const info = await readLock(lockDir);
     assert.strictEqual(info, null);

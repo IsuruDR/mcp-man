@@ -3,23 +3,36 @@
   "version": "0.3.1",
   "description": "Visual MCP server manager for Claude Code",
   "type": "module",
+  "author": "Isuru Ranaweera",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/isurur/mcp-man"
+  },
+  "homepage": "https://github.com/isurur/mcp-man#readme",
+  "bugs": {
+    "url": "https://github.com/isurur/mcp-man/issues"
+  },
   "bin": {
     "mcp-man": "./bin/mcp-man.js"
   },
   "scripts": {
     "start": "node bin/mcp-man.js",
-    "test": "node --test test/**/*.test.js"
+    "test": "node --test test/**/*.test.js",
+    "prepublishOnly": "npm test"
   },
   "files": [
     "bin/",
     "src/",
-    "public/"
+    "public/",
+    "LICENSE"
   ],
   "keywords": [
     "claude",
+    "claude-code",
     "mcp",
+    "mcp-server",
     "manager",
-    "claude-code"
+    "model-context-protocol"
   ],
   "license": "MIT",
   "engines": {
