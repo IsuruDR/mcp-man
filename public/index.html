@@ -1115,27 +1115,6 @@ function App() {
         </div>
       </div>
 
-      <div class="claude-ai-section">
-        <div class="claude-ai-row">
-          <div class="claude-ai-info">
-            <div class="claude-ai-label">Claude.ai MCP Servers</div>
-            <div class="claude-ai-hint">Allow Claude.ai to use its built-in MCP servers</div>
-          </div>
-          <${Toggle} checked=${state.claudeAiMcps} onChange=${toggleClaudeAi} />
-        </div>
-        ${state.claudeAiMcps && claudeAiConnected.length > 0 && html`
-          <div class="claude-ai-list">
-            ${claudeAiConnected.map(name => html`
-              <div class="claude-ai-item" key=${name}>
-                <span class="claude-ai-item-name">${name.replace('claude.ai ', '')}</span>
-                <span class="claude-ai-item-status connected">connected</span>
-              </div>
-            `)}
-          </div>
-          <div class="claude-ai-manage">Use /mcp in Claude Code to connect or disconnect individual servers</div>
-        `}
-      </div>
-
       ${!hasServers && html`
         <div class="empty-state">
           <p>No MCP servers found.</p>
@@ -1160,6 +1139,27 @@ function App() {
           onSelect=${(name) => setSelected({ scope: 'project', name, scopePath: projectPath })}
         />
       `)}
+
+      <div class="claude-ai-section">
+        <div class="claude-ai-row">
+          <div class="claude-ai-info">
+            <div class="claude-ai-label">Claude.ai MCP Servers</div>
+            <div class="claude-ai-hint">Allow Claude.ai to use its built-in MCP servers</div>
+          </div>
+          <${Toggle} checked=${state.claudeAiMcps} onChange=${toggleClaudeAi} />
+        </div>
+        ${state.claudeAiMcps && claudeAiConnected.length > 0 && html`
+          <div class="claude-ai-list">
+            ${claudeAiConnected.map(name => html`
+              <div class="claude-ai-item" key=${name}>
+                <span class="claude-ai-item-name">${name.replace('claude.ai ', '')}</span>
+                <span class="claude-ai-item-status connected">connected</span>
+              </div>
+            `)}
+          </div>
+          <div class="claude-ai-manage">Use /mcp in Claude Code to connect or disconnect individual servers</div>
+        `}
+      </div>
 
       ${toast && html`<div class="toast toast-${toast.type}">${toast.message}</div>`}
 
