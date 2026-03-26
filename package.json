@@ -1,6 +1,6 @@
 {
   "name": "@isurur/mcp-man",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Visual MCP server manager for Claude Code",
   "type": "module",
   "bin": {
