@@ -2,6 +2,11 @@
 
 Visual MCP server manager for Claude Code. Toggle, configure, and manage your MCP servers from a browser UI instead of editing JSON files by hand.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/isurur/mcp-man/main/docs/screenshots/main-view.png" width="360" alt="MCP Man main view" />
+  <img src="https://raw.githubusercontent.com/isurur/mcp-man/main/docs/screenshots/detail-view.png" width="360" alt="MCP Man detail view" />
+</p>
+
 ## Quick Start
 
 ```bash
