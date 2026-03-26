@@ -39,6 +39,16 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
+// Auto-detect .mcp.json in current working directory
+const cwd = process.cwd();
+try {
+  await import('node:fs/promises').then(fs => fs.access(path.join(cwd, '.mcp.json')));
+  if (!projectPaths.includes(cwd)) {
+    projectPaths.push(cwd);
+  }
+} catch {}
+
+
 // Re-exec through portless if available and not already running under it
 const runningUnderPortless = !!process.env.PORTLESS_URL;
 
