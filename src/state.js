@@ -38,14 +38,41 @@ export class StateManager {
     return this.#state;
   }
 
+  async #readClaudeJson() {
+    try {
+      const content = await fs.readFile(this.#claudeJsonPath, 'utf-8');
+      return JSON.parse(content);
+    } catch {
+      return {};
+    }
+  }
+
   async importFromConfig() {
     if (!this.#state) await this.load();
-    const userResult = await readConfigFile(this.#claudeJsonPath);
-    for (const [name, config] of Object.entries(userResult.servers)) {
+    const claudeJson = await this.#readClaudeJson();
+
+    // Import user-scope servers from top-level mcpServers
+    const userServers = claudeJson.mcpServers || {};
+    for (const [name, config] of Object.entries(userServers)) {
       if (!this.#state.servers.user[name]) {
         this.#state.servers.user[name] = { enabled: true, config };
       }
     }
+
+    // Import project-scope servers from ~/.claude.json projects entries
+    const projects = claudeJson.projects || {};
+    for (const [projectPath, projectData] of Object.entries(projects)) {
+      const projectServers = projectData.mcpServers || {};
+      if (Object.keys(projectServers).length === 0) continue;
+      this.#state.servers.projects[projectPath] ??= {};
+      for (const [name, config] of Object.entries(projectServers)) {
+        if (!this.#state.servers.projects[projectPath][name]) {
+          this.#state.servers.projects[projectPath][name] = { enabled: true, config };
+        }
+      }
+    }
+
+    // Import from .mcp.json files in explicit project paths
     for (const projectPath of this.#projectPaths) {
       const mcpPath = path.join(projectPath, '.mcp.json');
       const projectResult = await readConfigFile(mcpPath);
@@ -56,20 +83,37 @@ export class StateManager {
         }
       }
     }
+
     this.#state.lastImport = new Date().toISOString();
     await this.#persist();
   }
 
   async save(newState) {
     this.#state = newState;
+    const claudeJson = await this.#readClaudeJson();
 
-    // Auto-merge externally-added servers
-    const userResult = await readConfigFile(this.#claudeJsonPath);
-    for (const [name, config] of Object.entries(userResult.servers)) {
+    // Auto-merge externally-added user servers
+    const currentUserServers = claudeJson.mcpServers || {};
+    for (const [name, config] of Object.entries(currentUserServers)) {
       if (!this.#state.servers.user[name]) {
         this.#state.servers.user[name] = { enabled: true, config };
       }
     }
+
+    // Auto-merge externally-added project servers
+    const projects = claudeJson.projects || {};
+    for (const [projectPath, projectData] of Object.entries(projects)) {
+      const projectServers = projectData.mcpServers || {};
+      if (this.#state.servers.projects[projectPath]) {
+        for (const [name, config] of Object.entries(projectServers)) {
+          if (!this.#state.servers.projects[projectPath][name]) {
+            this.#state.servers.projects[projectPath][name] = { enabled: true, config };
+          }
+        }
+      }
+    }
+
+    // Also merge from .mcp.json files
     for (const projectPath of Object.keys(this.#state.servers.projects)) {
       const mcpPath = path.join(projectPath, '.mcp.json');
       const projectResult = await readConfigFile(mcpPath);
@@ -80,21 +124,31 @@ export class StateManager {
       }
     }
 
-    // Write enabled user servers
+    // Write enabled user servers to ~/.claude.json mcpServers
     const enabledUserServers = {};
     for (const [name, entry] of Object.entries(this.#state.servers.user)) {
       if (entry.enabled) enabledUserServers[name] = entry.config;
     }
-    await writeConfigFile(this.#claudeJsonPath, enabledUserServers);
+    claudeJson.mcpServers = enabledUserServers;
 
-    // Write enabled project servers
+    // Write enabled project servers to ~/.claude.json projects[path].mcpServers
+    // and also to .mcp.json files where they exist
     for (const [projectPath, servers] of Object.entries(this.#state.servers.projects)) {
       const enabledServers = {};
       for (const [name, entry] of Object.entries(servers)) {
         if (entry.enabled) enabledServers[name] = entry.config;
       }
-      await writeConfigFile(path.join(projectPath, '.mcp.json'), enabledServers);
+      if (claudeJson.projects?.[projectPath]) {
+        claudeJson.projects[projectPath].mcpServers = enabledServers;
+      }
+      // Also write .mcp.json for explicit project paths
+      if (this.#projectPaths.includes(projectPath)) {
+        await writeConfigFile(path.join(projectPath, '.mcp.json'), enabledServers);
+      }
     }
+
+    // Write back ~/.claude.json
+    await fs.writeFile(this.#claudeJsonPath, JSON.stringify(claudeJson, null, 2) + '\n');
 
     // Write Claude.ai MCPs toggle to settings.json
     if (this.#settingsJsonPath) {
@@ -118,13 +172,8 @@ export class StateManager {
   }
 
   async getConnectedClaudeAiMcps() {
-    try {
-      const content = await fs.readFile(this.#claudeJsonPath, 'utf-8');
-      const data = JSON.parse(content);
-      return data.claudeAiMcpEverConnected || [];
-    } catch {
-      return [];
-    }
+    const data = await this.#readClaudeJson();
+    return data.claudeAiMcpEverConnected || [];
   }
 
   async #persist() {
