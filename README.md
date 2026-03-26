@@ -2,6 +2,8 @@
 
 Visual MCP server manager for Claude Code. Toggle, configure, and manage your MCP servers from a browser UI instead of editing JSON files by hand.
 
+> **Runs entirely on your machine.** MCP Man is a local web server that reads and writes your local Claude Code config files. No data leaves your computer.
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/IsuruDR/mcp-man/main/docs/screenshots/main-view.png" width="360" alt="MCP Man main view" />
   <img src="https://raw.githubusercontent.com/IsuruDR/mcp-man/main/docs/screenshots/detail-view.png" width="360" alt="MCP Man detail view" />
